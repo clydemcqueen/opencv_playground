@@ -30,11 +30,11 @@ int main(int argc, char **argv)
 
   // Transition matrix F is 2x2, set to [[1, DT], [0, 1]]
   double F[] = {1, DT, 0, 1};
-  kalman.transitionMatrix = cv::Mat(2, 2, CV_64F, F).clone(); // Not sure why clone()?
+  kalman.transitionMatrix = cv::Mat(2, 2, CV_64F, F);
 
   // Control matrix B is 2x1, set to [[0], [DT]]
   double B[] = {0, DT};
-  kalman.controlMatrix = cv::Mat(2, 1, CV_64F, B).clone(); // Not sure why clone()?
+  kalman.controlMatrix = cv::Mat(2, 1, CV_64F, B);
 
   // Measurement matrix H is 2x1, set to [1, 0]
   cv::setIdentity(kalman.measurementMatrix, cv::Scalar(1));

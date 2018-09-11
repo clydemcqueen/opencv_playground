@@ -30,7 +30,7 @@ int main(int argc, char **argv)
 
   // Control matrix B is 2x1, set to [[0], [DT]]
   double B[] = {0, DT};
-  kalman.controlMatrix = cv::Mat(2, 1, CV_64F, B).clone(); // Not sure why clone()?
+  kalman.controlMatrix = cv::Mat(2, 1, CV_64F, B);
 
   // Measurement matrix H is 2x1, set to [1, 0]
   cv::setIdentity(kalman.measurementMatrix, cv::Scalar(1));
@@ -54,7 +54,7 @@ int main(int argc, char **argv)
     constexpr double DRAG_CONSTANT = 0.1;
     double velo_term = 1.0 - DRAG_CONSTANT * std::abs(x_k.at<double>(1));
     double F[] = {1, DT, 0, velo_term};
-    kalman.transitionMatrix = cv::Mat(2, 2, CV_64F, F).clone(); // Not sure why clone()?
+    kalman.transitionMatrix = cv::Mat(2, 2, CV_64F, F);
 
     // Prediction
     cv::Mat y_k = kalman.predict(u_k);
