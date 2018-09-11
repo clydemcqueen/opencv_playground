@@ -22,3 +22,6 @@ target_link_libraries(example_2_7 ${OpenCV_LIBS})
 
 add_executable(kalman kalman.cpp)
 target_link_libraries(kalman ${OpenCV_LIBS})
+
+add_executable(ekf_drag ekf_drag.cpp)
+target_link_libraries(ekf_drag ${OpenCV_LIBS})

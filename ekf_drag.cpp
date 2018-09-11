@@ -28,10 +28,6 @@ int main(int argc, char **argv)
   // Measurements are 1x1 [angle]
   cv::Mat z_k = cv::Mat::zeros(1, 1, CV_64F);
 
-  // Transition matrix F is 2x2, set to [[1, DT], [0, 1]]
-  double F[] = {1, DT, 0, 1};
-  kalman.transitionMatrix = cv::Mat(2, 2, CV_64F, F).clone(); // Not sure why clone()?
-
   // Control matrix B is 2x1, set to [[0], [DT]]
   double B[] = {0, DT};
   kalman.controlMatrix = cv::Mat(2, 1, CV_64F, B).clone(); // Not sure why clone()?
@@ -53,6 +49,13 @@ int main(int argc, char **argv)
 
   for (;;)
   {
+    // Transition matrix F is 2x2, set to [[1, DT], [0, 1 - c * angular_velo]]
+    // Compute (1 - c * angular_velo) for every cycle
+    constexpr double DRAG_CONSTANT = 0.1;
+    double velo_term = 1.0 - DRAG_CONSTANT * std::abs(x_k.at<double>(1));
+    double F[] = {1, DT, 0, velo_term};
+    kalman.transitionMatrix = cv::Mat(2, 2, CV_64F, F).clone(); // Not sure why clone()?
+
     // Prediction
     cv::Mat y_k = kalman.predict(u_k);
 
@@ -66,7 +69,7 @@ int main(int argc, char **argv)
     cv::circle(img, phi2xy(img, y_k), 4, cv::Scalar(255, 255, 255), 2); // Predicted: white bold
     cv::circle(img, phi2xy(img, x_k), 4, cv::Scalar(0, 0, 255));        // Actual: red
     cv::imshow("Kalman", img);
-    printf("angle %f, velo %f\n", x_k.at<double>(0), x_k.at<double>(1));
+    printf("angle %g, velo %g, accel %g\n", x_k.at<double>(0), x_k.at<double>(1), u_k.at<double>(0));
 
     // Adjust filter state
     kalman.correct(z_k);
@@ -79,12 +82,12 @@ int main(int argc, char **argv)
     switch (key)
     {
       case '+':
-        printf("accelerate\n");
-        u_k.at<double>(0) = 0.01;
+        u_k.at<double>(0) += 0.01;
+        printf("increase acceleration %g\n", u_k.at<double>(0));
         break;
       case '-':
-        printf("decelerate\n");
-        u_k.at<double>(0) = -0.01;
+        u_k.at<double>(0) -= 0.01;
+        printf("decrease acceleration %g\n", u_k.at<double>(0));
         break;
       case '0':
         printf("coast\n");
@@ -93,7 +96,6 @@ int main(int argc, char **argv)
       case 27:
         return 0;
       default:
-        printf("unknown key");
         break;
     }
   }
