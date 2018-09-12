@@ -1,12 +1,18 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
+#include "ekf_shared.h"
 
-cv::Point2i phi2xy(cv::Mat& img, cv::Mat& angle)
-{
-  return cv::Point(
-    cvRound(img.cols / 2 + img.cols / 3 * cos(angle.at<double>(0))),
-    cvRound(img.rows / 2 + img.cols / 3 * sin(angle.at<double>(0))));
-}
+// kalman.cpp modified to support drag (friction proportional to velocity squared)
+// Drag is non-linear, so F must be adjusted for every timestep
+
+// State: Θ, Θ'
+constexpr int STATE_DIM = 2;
+
+// Control inputs: Θ''
+constexpr int CONTROL_DIM = 1;
+
+// Measurement inputs: Θ
+constexpr int MEASURE_DIM = 1;
 
 constexpr int SLEEP_TIME = 100;
 constexpr double DT = SLEEP_TIME / 1000.0;
@@ -14,34 +20,35 @@ constexpr double DT = SLEEP_TIME / 1000.0;
 int main(int argc, char **argv)
 {
   cv::Mat img(500, 500, CV_8UC3);
-  cv::KalmanFilter kalman(2, 1, 1, CV_64F);
+  cv::KalmanFilter kalman(STATE_DIM, MEASURE_DIM, CONTROL_DIM, CV_64F);
 
-  // State is 2x1 (n=2) [angle, angular velocity]
-  cv::Mat x_k = cv::Mat::zeros(2, 1, CV_64F);
+  // State is STATE_DIM x 1
+  cv::Mat x_k = cv::Mat::zeros(STATE_DIM, 1, CV_64F);
 
-  // Control is 1x1 (c=1) [angular acceleration]
-  cv::Mat u_k = cv::Mat::zeros(1, 1, CV_64F);
+  // Control is CONTROL_DIM x 1
+  cv::Mat u_k = cv::Mat::zeros(CONTROL_DIM, 1, CV_64F);
 
-  // Process noise is 2x1
-  cv::Mat w_k(2, 1, CV_64F);
+  // Process noise is STATE_DIM x 1
+  cv::Mat w_k(STATE_DIM, 1, CV_64F);
 
-  // Measurements are 1x1 [angle]
-  cv::Mat z_k = cv::Mat::zeros(1, 1, CV_64F);
+  // Measurements are MEASURE_DIM x 1
+  cv::Mat z_k = cv::Mat::zeros(MEASURE_DIM, 1, CV_64F);
 
-  // Control matrix B is 2x1, set to [[0], [DT]]
+  // Control matrix B is STATE_DIM x CONTROL_DIM
   double B[] = {0, DT};
-  kalman.controlMatrix = cv::Mat(2, 1, CV_64F, B);
+  kalman.controlMatrix = cv::Mat(STATE_DIM, CONTROL_DIM, CV_64F, B);
 
-  // Measurement matrix H is 2x1, set to [1, 0]
-  cv::setIdentity(kalman.measurementMatrix, cv::Scalar(1));
+  // Measurement matrix H is MEASURE_DIM x STATE_DIM
+  double H[] = {1, 0};
+  kalman.measurementMatrix = cv::Mat(MEASURE_DIM, STATE_DIM, CV_64F, H);
 
-  // Process noise covariance Q is 2x2, set to [[1e-5, 0], [0, 1e-5]]
+  // Process noise covariance Q is STATE_DIM x STATE_DIM
   cv::setIdentity(kalman.processNoiseCov, cv::Scalar(1e-5));
 
-  // Measurement noise covariance R is 1x1, set to [1e-1]
+  // Measurement noise covariance R is MEASURE_DIM x MEASURE_DIM
   cv::setIdentity(kalman.measurementNoiseCov, cv::Scalar(1e-1));
 
-  // Posterior error covariance Σ is 2x2, initialize to [[1, 0], [0, 1]]
+  // Posterior error covariance Σ is STATE_DIM x STATE_DIM
   cv::setIdentity(kalman.errorCovPost, cv::Scalar(1));
 
   // Initialize the posterior with a random state
@@ -49,14 +56,13 @@ int main(int argc, char **argv)
 
   for (;;)
   {
-    // Transition matrix F is 2x2, set to [[1, DT], [0, 1 - c * angular_velo]]
-    // Compute (1 - c * angular_velo) for every cycle
+    // Transition matrix F is STATE_DIM x STATE_DIM
     constexpr double DRAG_CONSTANT = 0.1;
     double velo_term = 1.0 - DRAG_CONSTANT * std::abs(x_k.at<double>(1));
     double F[] = {1, DT, 0, velo_term};
-    kalman.transitionMatrix = cv::Mat(2, 2, CV_64F, F);
+    kalman.transitionMatrix = cv::Mat(STATE_DIM, STATE_DIM, CV_64F, F);
 
-    // Prediction
+    // Project the model forward to time t + dt
     cv::Mat y_k = kalman.predict(u_k);
 
     // Generate a fake measurement using random noise
@@ -74,7 +80,7 @@ int main(int argc, char **argv)
     // Adjust filter state
     kalman.correct(z_k);
 
-    // Step: apply transition matrix and control matrix, and add some process noise
+    // Generate a sort of "ground truth": apply transition matrix and control matrix, and add some process noise
     cv::randn(w_k, 0.0, sqrt((double)kalman.processNoiseCov.at<double>(0, 0)));
     x_k = kalman.transitionMatrix * x_k + kalman.controlMatrix * u_k + w_k;
 
@@ -99,6 +105,4 @@ int main(int argc, char **argv)
         break;
     }
   }
-
-  return 0;
 }
