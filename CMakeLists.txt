@@ -29,5 +29,5 @@ target_link_libraries(ekf_drag ${OpenCV_LIBS})
 add_executable(ekf_imu ekf_imu.cpp)
 target_link_libraries(ekf_imu ${OpenCV_LIBS})
 
-add_executable(ekf_drag_imu ekf_imu_drag.cpp)
-target_link_libraries(ekf_drag_imu ${OpenCV_LIBS})
+add_executable(ekf_imu_drag ekf_imu_drag.cpp)
+target_link_libraries(ekf_imu_drag ${OpenCV_LIBS})

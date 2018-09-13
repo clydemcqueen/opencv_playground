@@ -3,7 +3,7 @@
 #include "ekf_shared.h"
 
 // kalman.cpp modified to support drag (friction proportional to velocity squared)
-// Drag is non-linear, so F must be adjusted for every timestep
+// Drag can be added to the control input, so F and B are still linear -- thus, this is still a kf
 
 // State: Θ, Θ'
 constexpr int STATE_DIM = 2;
@@ -19,6 +19,9 @@ constexpr double DT = SLEEP_TIME / 1000.0;
 
 int main(int argc, char **argv)
 {
+  // Output of the controller
+  double target_acceleration = 0;
+
   cv::Mat img(500, 500, CV_8UC3);
   cv::KalmanFilter kalman(STATE_DIM, MEASURE_DIM, CONTROL_DIM, CV_64F);
 
@@ -33,6 +36,10 @@ int main(int argc, char **argv)
 
   // Measurements are MEASURE_DIM x 1
   cv::Mat z_k = cv::Mat::zeros(MEASURE_DIM, 1, CV_64F);
+
+  // Transition matrix F is STATE_DIM x STATE_DIM
+  double F[] = {1, DT, 0, 1};
+  kalman.transitionMatrix = cv::Mat(STATE_DIM, STATE_DIM, CV_64F, F);
 
   // Control matrix B is STATE_DIM x CONTROL_DIM
   double B[] = {0, DT};
@@ -56,11 +63,9 @@ int main(int argc, char **argv)
 
   for (;;)
   {
-    // Transition matrix F is STATE_DIM x STATE_DIM
+    // Control input is target acceleration - acceleration due to drag
     constexpr double DRAG_CONSTANT = 0.1;
-    double velo_term = 1.0 - DRAG_CONSTANT * std::abs(x_k.at<double>(1));
-    double F[] = {1, DT, 0, velo_term};
-    kalman.transitionMatrix = cv::Mat(STATE_DIM, STATE_DIM, CV_64F, F);
+    u_k.at<double>(0) = target_acceleration - DRAG_CONSTANT * x_k.at<double>(1) * std::abs(x_k.at<double>(1));
 
     // Project the model forward to time t + dt
     cv::Mat y_k = kalman.predict(u_k);
@@ -75,7 +80,8 @@ int main(int argc, char **argv)
     cv::circle(img, phi2xy(img, y_k), 4, cv::Scalar(255, 255, 255), 2); // Predicted: white bold
     cv::circle(img, phi2xy(img, x_k), 4, cv::Scalar(0, 0, 255));        // Actual: red
     cv::imshow("Kalman", img);
-    printf("angle %g, velo %g, accel %g\n", x_k.at<double>(0), x_k.at<double>(1), u_k.at<double>(0));
+    printf("angle %g, velo %g, accel %g, target %g\n",
+      x_k.at<double>(0), x_k.at<double>(1), u_k.at<double>(0), target_acceleration);
 
     // Adjust filter state
     kalman.correct(z_k);
@@ -88,16 +94,16 @@ int main(int argc, char **argv)
     switch (key)
     {
       case '+':
-        u_k.at<double>(0) += 0.01;
-        printf("increase acceleration %g\n", u_k.at<double>(0));
+        target_acceleration += 0.01;
+        printf("increase acceleration %g\n", target_acceleration);
         break;
       case '-':
-        u_k.at<double>(0) -= 0.01;
-        printf("decrease acceleration %g\n", u_k.at<double>(0));
+        target_acceleration -= 0.01;
+        printf("decrease acceleration %g\n", target_acceleration);
         break;
       case '0':
         printf("coast\n");
-        u_k.at<double>(0) = 0.0;
+        target_acceleration = 0.0;
         break;
       case 27:
         return 0;

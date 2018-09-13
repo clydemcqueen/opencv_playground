@@ -28,9 +28,6 @@ int main(int argc, char **argv)
   cv::Mat img(500, 500, CV_8UC3);
   cv::KalmanFilter kalman(STATE_DIM, MEASURE_DIM, CONTROL_DIM, CV_64F);
 
-  // Process noise is STATE_DIM x 1
-  cv::Mat w_k(STATE_DIM, 1, CV_64F);
-
   // Measurements are MEASURE_DIM x 1
   cv::Mat z_k = cv::Mat::zeros(MEASURE_DIM, 1, CV_64F);
 
@@ -69,7 +66,7 @@ int main(int argc, char **argv)
     cv::circle(img, phi2xy(img, y_k), 4, cv::Scalar(255, 255, 255), 2); // Predicted: white bold
     cv::imshow("Kalman", img);
     printf("angle %g, velo %g, accel %g, target %g, imu %g\n",
-      kalman.statePre.at<double>(0, 0), kalman.statePre.at<double>(0, 1), kalman.statePre.at<double>(0, 2),
+      kalman.statePre.at<double>(0), kalman.statePre.at<double>(1), kalman.statePre.at<double>(2),
       target_acceleration, z_k.at<double>(0));
 
     // Correct

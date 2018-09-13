@@ -3,6 +3,8 @@
 #include "ekf_shared.h"
 
 // ekf_imu.cpp modified to support drag
+// Drag is added to the simulated IMU measurement -- no changes to F
+// Still linear, so a kf, not an ekf
 
 // State: Θ, Θ', Θ''
 constexpr int STATE_DIM = 3;
@@ -24,11 +26,12 @@ int main(int argc, char **argv)
   cv::Mat img(500, 500, CV_8UC3);
   cv::KalmanFilter kalman(STATE_DIM, MEASURE_DIM, CONTROL_DIM, CV_64F);
 
-  // Process noise is STATE_DIM x 1
-  cv::Mat w_k(STATE_DIM, 1, CV_64F);
-
   // Measurements are MEASURE_DIM x 1
   cv::Mat z_k = cv::Mat::zeros(MEASURE_DIM, 1, CV_64F);
+
+  // Transition matrix F is STATE_DIM x STATE_DIM
+  double F[] = {1, DT, 0.5 * DT * DT, 0, 1, DT, 0, 0, 1};
+  kalman.transitionMatrix = cv::Mat(STATE_DIM, STATE_DIM, CV_64F, F);
 
   // Measurement matrix H is MEASURE_DIM x STATE_DIM
   double H[] = {0, 0, 1};
@@ -48,18 +51,15 @@ int main(int argc, char **argv)
 
   for (;;)
   {
-    // Transition matrix F is STATE_DIM x STATE_DIM
-    constexpr double DRAG_CONSTANT = 0.1;
-    double velo_term = 1.0 - DRAG_CONSTANT * std::abs(kalman.statePost.at<double>(1));
-    double F[] = {1, DT, 0.5 * DT * DT, 0, velo_term, velo_term * DT, 0, 0, 1};
-    kalman.transitionMatrix = cv::Mat(STATE_DIM, STATE_DIM, CV_64F, F);
-
     // Project the model forward to time t + dt
     cv::Mat y_k = kalman.predict();
 
     // Generate a fake measurement using random noise
+    // IMU mean is target acceleration - acceleration due to drag
     cv::randn(z_k, 0.0, sqrt((double)kalman.measurementNoiseCov.at<double>(0, 0)));
-    z_k.at<double>(0) += target_acceleration;
+    double theta_v = kalman.statePost.at<double>(1);
+    constexpr double DRAG_CONSTANT = 0.1;
+    z_k.at<double>(0) += target_acceleration - DRAG_CONSTANT * theta_v * std::abs(theta_v);
 
     // Plot points
     img = cv::Scalar::all(0);
@@ -67,7 +67,7 @@ int main(int argc, char **argv)
     cv::circle(img, phi2xy(img, y_k), 4, cv::Scalar(255, 255, 255), 2); // Predicted: white bold
     cv::imshow("Kalman", img);
     printf("angle %g, velo %g, accel %g, target %g, imu %g\n",
-      kalman.statePre.at<double>(0, 0), kalman.statePre.at<double>(0, 1), kalman.statePre.at<double>(0, 2),
+      kalman.statePre.at<double>(0), kalman.statePre.at<double>(1), kalman.statePre.at<double>(2),
       target_acceleration, z_k.at<double>(0));
 
     // Correct
